@@ -6,111 +6,114 @@ import matplotlib.animation as animation
 from scipy.spatial.distance import squareform, pdist, cdist
 from numpy.linalg import norm
 
-width, height = 640, 480
+width, height = 1280, 720
 
 
-class Boids:
+class agents:
     """Class that represents Boids simulation"""
 
-    def __init__(self, N):
+    def __init__(self, members):
         """ initialize the Boid simulation"""
         # init position & velocities
-        self.pos = [width / 2.0, height / 2.0] + 10 * np.random.rand(2 * N).reshape(N, 2)
+
+        xcor=np.random.uniform(0,width,members)  #generates N random numbers from 0 to width
+        ycor = np.random.uniform(0, height, members)
+        self.pVector=np.array(list(zip(xcor,ycor))) #generates an array of Nx2
+
+        #col 1 = x-coordinate, col 2 = y-corrdinate
+
         # normalized random velocities
-        angles = 2 * math.pi * np.random.rand(N)
-        self.vel = np.array(list(zip(np.sin(angles), np.cos(angles))))
-        self.N = N
+        theta = 2 * math.pi * np.random.rand(members)
+        self.dVector = np.array(list(zip(np.sin(theta), np.cos(theta))))
+        self.members = members
         # min dist of approach
-        self.minDist = 25.0
+        self.distMin = 30.0
         # max magnitude of velocities calculated by "rules"
-        self.maxRuleVel = 0.03
+        self.vrMax = 0.02
         # max maginitude of final velocity
-        self.maxVel = 2.0
+        self.vfMax = 1.5
 
-    def tick(self, frameNum, pts, beak):
-        """Update the simulation by one time step."""
-        # get pairwise distances
-        self.distMatrix = squareform(pdist(self.pos))
-        # apply rules:
-        self.vel += self.applyRules()
-        self.limit(self.vel, self.maxVel)
-        self.pos += self.vel
-        self.applyBC()
-        # update data
-        pts.set_data(self.pos.reshape(2 * self.N)[::2],
-                     self.pos.reshape(2 * self.N)[1::2])
-        vec = self.pos + 10 * self.vel / self.maxVel
-        beak.set_data(vec.reshape(2 * self.N)[::2],
-                      vec.reshape(2 * self.N)[1::2])
 
-    def limitVec(self, vec, maxVal):
-        """limit magnitide of 2D vector"""
-        mag = norm(vec)
-        if mag > maxVal:
-            vec[0], vec[1] = vec[0] * maxVal / mag, vec[1] * maxVal / mag
-
-    def limit(self, X, maxVal):
-        """limit magnitide of 2D vectors in array X to maxValue"""
-        for vec in X:
-            self.limitVec(vec, maxVal)
-
-    def applyBC(self):
+    def wrap(self):
         """apply boundary conditions"""
-        deltaR = 2.0
-        for coord in self.pos:
-            if coord[0] > width + deltaR:
-                coord[0] = - deltaR
-            if coord[0] < - deltaR:
-                coord[0] = width + deltaR
-            if coord[1] > height + deltaR:
-                coord[1] = - deltaR
-            if coord[1] < - deltaR:
-                coord[1] = height + deltaR
+        offWindow = 2.0
+        for cor in self.pVector:
+            #BC for the x-axis
+            if cor[0] > width + offWindow:
+                cor[0] = - offWindow
+            if cor[0] < - offWindow:
+                cor[0] = width + offWindow
+            #BC for the y-axis
+            if cor[1] > height + offWindow:
+                cor[1] = - offWindow
+            if cor[1] < - offWindow:
+                cor[1] = height + offWindow
 
-    def applyRules(self):
+    def flocNature(self):
         # apply rule #1 - Separation
-        D = self.distMatrix < 25.0
-        vel = self.pos * D.sum(axis=1).reshape(self.N, 1) - D.dot(self.pos)
-        self.limit(vel, self.maxRuleVel)
+        condMet = self.spacMat < 30.0  #it gives a boolean type array with values true or false.
 
+        #D.sum(axis=1) gives a row matrix by summing the column values of D.
+        dVector = self.pVector * condMet.sum(axis=1).reshape(self.members, 1) - condMet.dot(self.pVector)
+        self.limit(dVector, self.vrMax)
         # different distance threshold
-        D = self.distMatrix < 50.0
+        #D = self.distMatrix < 50.0
 
         # apply rule #2 - Alignment
-        vel2 = D.dot(self.vel)
-        self.limit(vel2, self.maxRuleVel)
-        vel += vel2;
+        d2Vector = condMet.dot(self.dVector)
+        self.limit(d2Vector, self.vrMax)
+        dVector += d2Vector;
 
-        # apply rule #1 - Cohesion
-        vel3 = D.dot(self.pos) - self.pos
-        self.limit(vel3, self.maxRuleVel)
-        vel += vel3
+        # apply rule #3 - Cohesion
+        d3Vector = condMet.dot(self.pVector) - self.pVector
+        self.limit(d3Vector, self.vrMax)
+        dVector += d3Vector
 
-        return vel
-
-    def buttonPress(self, event):
-        """event handler for matplotlib button presses"""
-        # left click - add a boid
-        if event.button is 1:
-            self.pos = np.concatenate((self.pos,
-                                       np.array([[event.xdata, event.ydata]])),
-                                      axis=0)
-            # random velocity
-            angles = 2 * math.pi * np.random.rand(1)
-            v = np.array(list(zip(np.sin(angles), np.cos(angles))))
-            self.vel = np.concatenate((self.vel, v), axis=0)
-            self.N += 1
-            # right click - scatter
-        elif event.button is 3:
-            # add scattering velocity
-            self.vel += 0.1 * (self.pos - np.array([[event.xdata, event.ydata]]))
+        return dVector
 
 
-def tick(frameNum, pts, beak, boids):
+    def Controller(self, frameCount, body, head):
+        """Update the simulation by one time step."""
+        # get pairwise distances
+        # gets the distance from each member and itself
+        self.spacMat = squareform(pdist(self.pVector))
+
+        # apply rules:
+        self.dVector += self.flocNature()  #updating velocity according to the 3 rules.
+        self.limit(self.dVector, self.vfMax) # setting the limit up to max velocity.
+        self.pVector += self.dVector # updating position according to the velocity
+        self.wrap()
+
+        # update data
+        body.set_data(self.pVector.reshape(2 * self.members)[::2],
+                     self.pVector.reshape(2 * self.members)[1::2])
+
+        newLocation = self.pVector + 10 * self.dVector / self.vfMax #it determines the position of the head respect to the body
+
+        head.set_data(newLocation.reshape(2 * self.members)[::2],
+                      newLocation.reshape(2 * self.members)[1::2])
+        #(2*self.N)[::2] selects the x-coordinate values.
+        #(2*self.N)[1::2] selects the y-coordinate values.
+
+    def limitVec(self, newLocation, valueMax):
+        """limit magnitide of 2D vector"""
+        amount = norm(newLocation)
+        if amount > valueMax:
+            newLocation[0], newLocation[1] = newLocation[0] * valueMax / amount, newLocation[1] * valueMax / amount
+
+    def limit(self, array, valueMax):
+        """limit magnitide of 2D vectors in array X to maxValue"""
+        for newLocation in array:
+            self.limitVec(newLocation, valueMax)
+
+
+
+
+def fbController(frameCount, body, head, agents):
     # print frameNum
     """update function for animation"""
-    boids.tick(frameNum, pts, beak)
-    return pts, beak
+    agents.Controller(frameCount, body, head)
+    return body, head
 
 
 # main() function
@@ -120,31 +123,27 @@ def main():
 
     parser = argparse.ArgumentParser(description="Implementing Craig Reynold's Boids...")
     # add arguments
-    parser.add_argument('--num-boids', dest='N', required=False)
+    parser.add_argument('--num-boids', dest='members', required=False)
     args = parser.parse_args()
 
     # number of boids
-    N = 100
-    if args.N:
-        N = int(args.N)
+    members = 50
+    if args.members:
+        members = int(args.members)
 
     # create boids
-    boids = Boids(N)
+    boids = agents(members)
 
     # setup plot
     fig = plt.figure()
     ax = plt.axes(xlim=(0, width), ylim=(0, height))
 
-    pts, = ax.plot([], [], markersize=10,
-                   c='k', marker='o', ls='None')
-    beak, = ax.plot([], [], markersize=4,
+    body, = ax.plot([], [], markersize=10,
+                   c='k', marker='8', ls='None')
+    head, = ax.plot([], [], markersize=4,
                     c='r', marker='o', ls='None')
-    anim = animation.FuncAnimation(fig, tick, fargs=(pts, beak, boids),
+    anim = animation.FuncAnimation(fig, fbController, fargs=(body, head, boids),
                                    interval=50)
-
-    # add a "button press" event handler
-    cid = fig.canvas.mpl_connect('button_press_event', boids.buttonPress)
-
     plt.show()
 
 
