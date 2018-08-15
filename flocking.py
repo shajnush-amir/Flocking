@@ -27,11 +27,11 @@ class agents:
         self.dVector = np.array(list(zip(np.sin(theta), np.cos(theta))))
         self.members = members
         # min dist of approach
-        self.distMin = 30.0
+        self.distMin = 15.0
         # max magnitude of velocities calculated by "rules"
-        self.vrMax = 0.02
+        self.vrMax = 0.1
         # max maginitude of final velocity
-        self.vfMax = 1.5
+        self.vfMax = 2.5
 
 
     def wrap(self):
@@ -51,7 +51,7 @@ class agents:
 
     def flocNature(self):
         # apply rule #1 - Separation
-        condMet = self.spacMat < 30.0  #it gives a boolean type array with values true or false.
+        condMet = self.spacMat < 50.0  #it gives a boolean type array with values true or false.
 
         #D.sum(axis=1) gives a row matrix by summing the column values of D.
         dVector = self.pVector * condMet.sum(axis=1).reshape(self.members, 1) - condMet.dot(self.pVector)
